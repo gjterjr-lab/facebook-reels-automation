@@ -37,7 +37,7 @@ jobs:
           FACEBOOK_PAGE_TOKENS: ${{ secrets.FACEBOOK_PAGE_TOKENS }}
           META_GRAPH_API_VERSION: ${{ vars.META_GRAPH_API_VERSION }}
           DEFAULT_CAPTION: "Fortuner, Scorpio repossessed by the bank, cheapest #auction #roamingbird #auction2026 #scorpioselToday #viral #reelsvideo #viralreels"
-        run: python src/loop.py
+        run: python -u src/loop.py
 
       - name: Start the next loop
         if: success()
