@@ -1,0 +1,46 @@
+name: Facebook Reels Automation
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Safety net only. The job below loops by itself every 10 minutes and
+    # starts its own successor, so this just restarts it if the chain breaks.
+    - cron: "23 * * * *"
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: reels-automation
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run automation (one video, then wait 10 minutes, repeat)
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_UPLOAD_FOLDER_ID: ${{ secrets.GOOGLE_UPLOAD_FOLDER_ID }}
+          GOOGLE_PUBLISHED_FOLDER_ID: ${{ secrets.GOOGLE_PUBLISHED_FOLDER_ID }}
+          FACEBOOK_PAGE_TOKENS: ${{ secrets.FACEBOOK_PAGE_TOKENS }}
+          META_GRAPH_API_VERSION: ${{ vars.META_GRAPH_API_VERSION }}
+          DEFAULT_CAPTION: "Fortuner, Scorpio repossessed by the bank, cheapest #auction #roamingbird #auction2026 #scorpioselToday #viral #reelsvideo #viralreels"
+        run: python src/loop.py
+
+      - name: Start the next loop
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run upload-reels.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}"
