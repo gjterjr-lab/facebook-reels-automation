@@ -8,7 +8,8 @@ from google_drive import (
     list_videos,
     download_video,
     get_published_pages,
-    mark_page_published,
+    mark_posted,
+    last_posted_page,
     move_to_published,
 )
 
@@ -72,32 +73,35 @@ def main():
         raise RuntimeError("Missing Google Drive folder IDs")
 
     page_tokens = load_page_tokens()
+    order = list(page_tokens)
     page_numbers = {
         page_id: number
-        for number, page_id in enumerate(page_tokens, start=1)
+        for number, page_id in enumerate(order, start=1)
     }
     videos = list_videos(upload_folder_id)
 
     print(f"Found {len(videos)} video(s).")
+
+    # Rotation: one video goes to ONE Page. The Page that got the previous
+    # video is remembered on that video in the Published folder, so this
+    # round continues with the next Page in order and wraps to the first.
+    last_page = last_posted_page(published_folder_id)
+
+    if last_page in order:
+        start = (order.index(last_page) + 1) % len(order)
+    else:
+        start = 0
+
+    turn = order[start:] + order[:start]
 
     for video in videos:
         file_id = video["id"]
         filename = video["name"]
         label = tag(file_id)
 
-        published_pages = get_published_pages(video)
-
-        pending_pages = [
-            page_id
-            for page_id in page_tokens
-            if page_id not in published_pages
-        ]
-
-        if not pending_pages:
-            print(
-                f"All Pages completed for {label}. "
-                "Moving to Published."
-            )
+        if get_published_pages(video):
+            # Already posted before (old all-Pages mode): do not post again.
+            print(f"{label} was already posted. Moving to Published.")
             move_to_published(
                 file_id,
                 upload_folder_id,
@@ -106,14 +110,13 @@ def main():
             continue
 
         print(
-            f"Processing {label} for "
-            f"{len(pending_pages)} Page(s)."
+            f"Processing {label}. "
+            f"This turn: Page {page_numbers[turn[0]]}."
         )
 
         local_path = download_video(file_id, filename)
-        published_now = 0
 
-        for page_id in pending_pages:
+        for page_id in turn:
             try:
                 result = publish_reel(
                     page_id=page_id,
@@ -121,19 +124,6 @@ def main():
                     video_path=local_path,
                     caption=caption,
                 )
-
-                if result["success"]:
-                    published_now += 1
-                    mark_page_published(
-                        file_id,
-                        page_id,
-                        video,
-                    )
-                    print(
-                        f"Published {label} "
-                        f"to Page {page_numbers[page_id]}."
-                    )
-
             except Exception as error:
                 print(
                     f"Failed for Page {page_numbers[page_id]}: "
@@ -145,31 +135,24 @@ def main():
                 if detail:
                     print(f"Facebook response: {detail}")
 
-        updated_pages = get_published_pages(video)
+                continue
 
-        if all(
-            page_id in updated_pages
-            for page_id in page_tokens
-        ):
-            move_to_published(
-                file_id,
-                upload_folder_id,
-                published_folder_id,
-            )
-            print(f"Completed all Pages for {label}.")
-        else:
-            print(
-                f"{label} still has pending Pages. "
-                "It will be retried."
-            )
+            if result["success"]:
+                mark_posted(file_id, page_id, video)
+                move_to_published(
+                    file_id,
+                    upload_folder_id,
+                    published_folder_id,
+                )
+                print(
+                    f"Published {label} "
+                    f"to Page {page_numbers[page_id]}. "
+                    "Next video goes to the next Page."
+                )
+                # One video, one Page, then the run ends (10 min wait).
+                return
 
-        # One video per run: as soon as a video was published to at least
-        # one Page, stop here. The next video waits for the next run.
-        # A video that could not be published anywhere does not use up the
-        # run, so it can never block the videos behind it.
-        if published_now:
-            print("One video handled. The next one waits for the next run.")
-            break
+        print(f"{label} could not be published to any Page. Will retry.")
 
 
 if __name__ == "__main__":

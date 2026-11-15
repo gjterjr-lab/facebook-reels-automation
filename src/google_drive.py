@@ -134,3 +134,41 @@ def move_to_published(file_id, upload_folder_id,
         removeParents=upload_folder_id,
         fields="id,parents",
     ).execute()
+
+
+def mark_posted(file_id, page_id, file):
+    # Remember which single Page got this video. The Page rotation reads
+    # this back from the newest file in the Published folder.
+    service = get_drive_service()
+
+    app_properties = file.get("appProperties") or {}
+    app_properties["published_page_ids"] = json.dumps([str(page_id)])
+    app_properties["posted_page_id"] = str(page_id)
+
+    service.files().update(
+        fileId=file_id,
+        body={"appProperties": app_properties},
+        fields="id,appProperties",
+    ).execute()
+
+    file["appProperties"] = app_properties
+
+
+def last_posted_page(published_folder_id):
+    # Page that received the most recently posted video, or None.
+    service = get_drive_service()
+
+    response = service.files().list(
+        q=f"'{published_folder_id}' in parents and trashed = false",
+        pageSize=50,
+        orderBy="modifiedTime desc",
+        fields="files(id,appProperties)",
+    ).execute()
+
+    for file in response.get("files", []):
+        page_id = (file.get("appProperties") or {}).get("posted_page_id")
+
+        if page_id:
+            return page_id
+
+    return None
