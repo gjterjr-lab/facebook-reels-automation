@@ -10,8 +10,9 @@ import requests
 
 VERSION = os.environ.get("META_GRAPH_API_VERSION") or "v21.0"
 BASE = f"https://graph.facebook.com/{VERSION}"
-DEADLINE = time.monotonic() + 19000
-PAUSE = 20
+START_DELAY = 7200
+DEADLINE = time.monotonic() + 20000
+PAUSE = 25
 LIMIT_WAIT = 900
 LIMIT_CODES = {4, 17, 32, 613, 80001, 80002, 80004}
 
@@ -67,6 +68,8 @@ def list_reels(page_id, token):
 
 
 def main():
+    print(f"Waiting {START_DELAY // 60} min so Facebook's limit can clear.", flush=True)
+    time.sleep(START_DELAY)
     tokens = json.loads(os.environ["FACEBOOK_PAGE_TOKENS"])
     pages = list(tokens.items())
     todo = {}
