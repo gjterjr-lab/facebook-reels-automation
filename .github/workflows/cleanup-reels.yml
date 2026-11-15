@@ -1,0 +1,26 @@
+name: TEMP cleanup reels
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reels-cleanup
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -q requests
+      - name: Delete all reels
+        env:
+          FACEBOOK_PAGE_TOKENS: ${{ secrets.FACEBOOK_PAGE_TOKENS }}
+          META_GRAPH_API_VERSION: ${{ vars.META_GRAPH_API_VERSION }}
+        run: python -u src/cleanup_reels.py
